@@ -28,6 +28,11 @@ local command = {
 
 keys['esc'] = command_mode
 
+--[[the mode stuff built into the ta api allows unbound letters through
+	but filters out things like ctrl-w and ctrl-s which is basically exactly
+	opposite of what i want. for some reason the following hacks let
+	control keys through. i don't know why, but it's what i want, so i'm
+	not sweating it.]]
 local key_meta = getmetatable(keys)
 local tavi_meta = {}
 setmetatable(keys,tavi_meta)
