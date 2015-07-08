@@ -1,3 +1,10 @@
+--[[
+keycodes intentionally not implemented:
+	ctrl-g:	just not useful, all this info is already there
+keycodes intentionally changed:
+	ctrl-h:	don't erase, backspace is easier to reach than right arrow
+]]
+
 local M = {}
 
 local mode, modes
@@ -22,14 +29,23 @@ end
 command_mode()
 
 local function move_up(distance) --moves at least one unless at top
-					distance = distance > 0 and distance or 1
-					
-					local first = buffer.first_visible_line
-					first = first - distance
-					first = first < 0 and 0 or first
-					
-					buffer.first_visible_line = first
-					buffer:move_caret_inside_view()
+	distance = distance > 0 and distance or 1
+
+	local first = buffer.first_visible_line
+	first = first - distance
+	first = first < 0 and 0 or first
+
+	buffer.first_visible_line = first
+	buffer:move_caret_inside_view()
+end
+local function move_down(distance) --moves at least one unless at bottom
+	distance = distance > 0 and distance or 1
+
+	local first = buffer.first_visible_line
+	first = first + distance
+
+	buffer.first_visible_line = first
+	buffer:move_caret_inside_view()
 end
 
 --debug reminder thingie
@@ -49,6 +65,13 @@ local modes =
 		['cd']	=	function()
 					move_up(math.floor(buffer.lines_on_screen/2))
 				end,
+		['ce']	=	function()
+					move_down(1)
+				end,
+		['cf']	=	function()
+					move_down(buffer.lines_on_screen - 2)
+				end,
+		['ch']	=	buffer.char_left,
 		['h']	=	buffer.char_left,
 		['j']	=	buffer.line_down,
 		['k']	=	buffer.line_up,
@@ -57,13 +80,18 @@ local modes =
 	},
 	insert =
 	{
+		['esc']	=	command_mode,
 		['c@']	=	unimplemented,
 		['cd']	=	function()
 					buffer:back_tab()
 				end,
-		['esc']	=	command_mode
 	}
 }
+
+--shared keycodes
+for _,v in ipairs({'cb','ce','cf','ch'}) do
+	modes.insert[v]=modes.command[v]
+end
 
 --[[for some reason the following hacks let
 	control keys through. i don't know why, but i'm
@@ -88,6 +116,8 @@ local function forward_factory(key) return function() modes[mode][key]() end end
 keys['c@']	=	forward_factory('c@')
 keys['cb']	=	forward_factory('cb')
 keys['cd']	=	forward_factory('cd')
+keys['ce']	=	forward_factory('ce')
+keys['cf']	=	forward_factory('cf')
 
 events.connect(events.UPDATE_UI, update_ui)
 
