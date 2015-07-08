@@ -18,39 +18,36 @@ local function insert_mode()
 	update_ui()
 end
 
---catchall
-keys['esc'] = command_mode
+--start in command mode by default
+command_mode()
+
+local function move_up(distance) --moves at least one unless at top
+					distance = distance > 0 and distance or 1
+					
+					local first = buffer.first_visible_line
+					first = first - distance
+					first = first < 0 and 0 or first
+					
+					buffer.first_visible_line = first
+					buffer:move_caret_inside_view()
+end
 
 --debug reminder thingie
 function unimplemented() print('unimplemented') end
 
---start in command mode by default
-command_mode()
-
-
 --[[the mode stuff built into the ta api allows unbound letters through
 	but filters out things like ctrl-w and ctrl-s which is basically exactly
-	opposite of what i want. for some reason the following hacks let
-	control keys through. i don't know why, but it's what i want, so i'm
-	not sweating it.]]
+	opposite of what i want. so we are rolling our own.]]
 
 local modes =
 {
 	command =
 	{
 		['cb']	=	function()
-					buffer:page_up()
-					if 3 >= buffer.lines_on_screen then
-						buffer:line_scroll_down()
-						buffer:line_scroll_donw()
-					end
+					move_up(buffer.lines_on_screen - 2)
 				end,
-		--todo move caret into view
 		['cd']	=	function()
-					local half = math.floor(buffer.lines_on_screen/2)
-					half = half or 1
-					buffer.first_visible_line =
-						buffer.first_visible_line + half
+					move_up(math.floor(buffer.lines_on_screen/2))
 				end,
 		['h']	=	buffer.char_left,
 		['j']	=	buffer.line_down,
@@ -63,10 +60,14 @@ local modes =
 		['c@']	=	unimplemented,
 		['cd']	=	function()
 					buffer:back_tab()
-				end
+				end,
+		['esc']	=	command_mode
 	}
 }
 
+--[[for some reason the following hacks let
+	control keys through. i don't know why, but i'm
+	not sweating it.]]
 local tavi_meta = {}
 setmetatable(keys,tavi_meta)
 
@@ -81,10 +82,12 @@ function tavi_meta.__index(table, key)
 	end
 end
 
---control sequences, just forward as required
-keys['c@']	=	function() modes[mode]['c@']() end
-keys['cb']	=	function() modes[mode]['cb']() end
-keys['cd']	=	function() modes[mode]['cd']() end
+--forward the control sequences we want to deal with
+local function forward_factory(key) return function() modes[mode][key]() end end
+
+keys['c@']	=	forward_factory('c@')
+keys['cb']	=	forward_factory('cb')
+keys['cd']	=	forward_factory('cd')
 
 events.connect(events.UPDATE_UI, update_ui)
 
