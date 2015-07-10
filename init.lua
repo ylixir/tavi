@@ -1,8 +1,21 @@
 --[[
 keycodes intentionally not implemented:
 	ctrl-g:	just not useful, all this info is already there
+	ctrl-i: not easier to push than tab
+	ctrl-m: enter (\n) has the same behavior
+	ctrl-n: we already have ctrl-j
+	ctrl-p: we have ctrl-k
+	ctrl-r: we (probably) aren't using a 300 baud modem
+	ctrl-t: i am unclear what the difference between this and tab is
+	ctrl-v: we already have ctrl-q
 keycodes intentionally changed:
 	ctrl-h:	don't erase, backspace is easier to reach than right arrow
+	ctrl-l: this is a relic, instead make it a movement like it should be
+	ctrl-q: allows you to enter the unicode character in hex, this may change
+keycodes added:
+	ctrl-k: if i'm doing hj and l then i should do k also
+keycodes that need to be (re)implemented:
+	ctrl-@
 ]]
 
 local M = {}
@@ -51,10 +64,15 @@ end
 --debug reminder thingie
 function unimplemented() print('unimplemented') end
 
+
+--make a keys[mode] for entering unicode characters
+keys.utf8_input = {['\n'] = {ui.command_entry.finish_mode, function(code)
+	_G.buffer:add_text(utf8.char(tonumber(code, 16)))
+end}}
+
 --[[the mode stuff built into the ta api allows unbound letters through
 	but filters out things like ctrl-w and ctrl-s which is basically exactly
 	opposite of what i want. so we are rolling our own.]]
-
 local modes =
 {
 	command =
@@ -63,15 +81,24 @@ local modes =
 					move_up(buffer.lines_on_screen - 2)
 				end,
 		['cd']	=	function()
-					move_up(math.floor(buffer.lines_on_screen/2))
+					move_down(math.floor(buffer.lines_on_screen/2))
 				end,
-		['ce']	=	function()
-					move_down(1)
-				end,
+		['ce']	=	buffer.line_scroll_down,
 		['cf']	=	function()
 					move_down(buffer.lines_on_screen - 2)
 				end,
 		['ch']	=	buffer.char_left,
+		['cj']	=	buffer.line_down,
+		['ck']	=	buffer.line_up,
+		['cl']	=	buffer.char_right,
+		['\n']	= function()
+					buffer.line_down()
+					buffer.home()
+					buffer.vc_home()
+				end,
+		['cu']	=	function()
+					move_up(math.floor(buffer.lines_on_screen/2))
+				end,
 		['h']	=	buffer.char_left,
 		['j']	=	buffer.line_down,
 		['k']	=	buffer.line_up,
@@ -82,20 +109,28 @@ local modes =
 	{
 		['esc']	=	command_mode,
 		['c@']	=	unimplemented,
-		['cd']	=	function()
-					buffer:back_tab()
-				end,
+		['cd']	=	buffer.back_tab,
+		['cq']	=	function()
+					ui.statusbar_text = 'Enter 4 digit unicode character code'
+					ui.command_entry.enter_mode('utf8_input')
+				end
 	}
 }
 
 --shared keycodes
-for _,v in ipairs({'cb','ce','cf','ch'}) do
+for _,v in ipairs({'cb','ce','cf','ch','cj','ck','cl','cu'}) do
 	modes.insert[v]=modes.command[v]
 end
 
---[[for some reason the following hacks let
-	control keys through. i don't know why, but i'm
-	not sweating it.]]
+--for some reason the metatable hacks let control keys through.
+--i don't know why, but i can just 'forward' the ones i care about
+for _,v in ipairs({'c@','cb','cd','ce','cf','ch','cj','ck','cl','cq','cu'}) do
+	keys[v] = function()
+							f = modes[mode][v]
+							return f and f()
+						end
+end
+
 local tavi_meta = {}
 setmetatable(keys,tavi_meta)
 
@@ -109,15 +144,6 @@ function tavi_meta.__index(table, key)
 		return modes[mode][key] or update_ui
 	end
 end
-
---forward the control sequences we want to deal with
-local function forward_factory(key) return function() modes[mode][key]() end end
-
-keys['c@']	=	forward_factory('c@')
-keys['cb']	=	forward_factory('cb')
-keys['cd']	=	forward_factory('cd')
-keys['ce']	=	forward_factory('ce')
-keys['cf']	=	forward_factory('cf')
 
 events.connect(events.UPDATE_UI, update_ui)
 
